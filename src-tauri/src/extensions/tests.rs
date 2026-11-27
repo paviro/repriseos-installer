@@ -141,30 +141,30 @@ fn unknown_development_can_install_and_old_release_cannot() {
 
 #[test]
 fn layout_floor_refuses_packages_from_older_sdks() {
-    let old = parse(&packed("sample", "1.0.0", 82, 0x10055, None).data).unwrap();
-    let rebuilt = parse(&packed("sample", "1.0.1", 82, 0x10056, None).data).unwrap();
+    let old = parse(&packed("sample", "1.0.0", 82, 0x10058, None).data).unwrap();
+    let rebuilt = parse(&packed("sample", "1.0.1", 82, 0x10059, None).data).unwrap();
     let before = firmware::identify(&core("0.4.0", 0x10052), "iPod".into()).unwrap();
     assert_eq!(before.sdk_floor, None);
     assert!(before.allows(&old) && before.allows(&rebuilt));
     for (version, api) in [
-        ("0.5.0", 0x10056),
-        ("0.5.0", 0x10057),
-        ("Development", 0x10056),
+        ("0.5.0", 0x10059),
+        ("0.5.0", 0x1005a),
+        ("Development", 0x10059),
     ] {
         let device = firmware::identify(&core(version, api), "iPod".into()).unwrap();
-        assert_eq!(device.sdk_floor.as_deref(), Some("1.86"));
+        assert_eq!(device.sdk_floor.as_deref(), Some("1.89"));
         assert!(!device.allows(&old));
         assert!(device.allows(&rebuilt));
     }
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     fs::create_dir_all(root.join("iPod_Control/Device")).unwrap();
-    fs::write(root.join("osos-cfw.bin"), core("0.5.0", 0x10056)).unwrap();
+    fs::write(root.join("osos-cfw.bin"), core("0.5.0", 0x10059)).unwrap();
     fs::write(root.join("cfw-loader.bin"), vec![0; 0x25220]).unwrap();
     let mount = inspect(root).unwrap().unwrap();
-    assert!(write(&mount, packed("sample", "1.0.0", 82, 0x10055, None)).is_err());
-    write(&mount, packed("sample", "1.0.1", 82, 0x10056, None)).unwrap();
-    assert_eq!(inventory(root).unwrap()[0].sdk, "1.86");
+    assert!(write(&mount, packed("sample", "1.0.0", 82, 0x10058, None)).is_err());
+    write(&mount, packed("sample", "1.0.1", 82, 0x10059, None)).unwrap();
+    assert_eq!(inventory(root).unwrap()[0].sdk, "1.89");
 }
 
 #[test]

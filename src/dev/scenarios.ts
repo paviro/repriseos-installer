@@ -374,16 +374,16 @@ export const scenarios: Scenario[] = [
   {
     id: "extensions-older-builds",
     group: "Extensions",
-    label: "Older builds on a 1.86 core",
+    label: "Older builds on a 1.89 core",
     screen: "extensions",
-    hint: "A core at RVX API 1.86 skips packages from older SDKs. Night Shift and DSP are such copies, and so is every release in the live catalog.",
+    hint: "A core at RVX API 1.89 skips packages from older SDKs. Night Shift and DSP are such copies, and so is every release in the live catalog.",
     extensions: {
-      api: "1.86",
-      sdkFloor: "1.86",
+      api: "1.89",
+      sdkFloor: "1.89",
       installed: [
         { ...nightShift, api: "1.84", sdk: "1.84" },
         { ...dsp, api: "1.74", sdk: "1.85" },
-        { ...crossfeed, version: "0.1.1", api: "1.84", sdk: "1.86" },
+        { ...crossfeed, version: "0.1.1", api: "1.84", sdk: "1.89" },
       ],
     },
   },

@@ -20,9 +20,9 @@ fn api_text(api: u32) -> String {
     format!("{}.{}", api >> 16, api & 0xffff)
 }
 
-/// rv_row and rv_menu_entry grew in API 1.86, so a core at that API or later
-/// only loads packages an SDK at 1.86 or later packed.
-const LAYOUT_API: u32 = 0x10056;
+/// rv_row and rv_menu_entry grew in API 1.86 and rv_pane in 1.89, so a core at
+/// 1.89 or later only loads packages an SDK at 1.89 or later packed.
+const LAYOUT_API: u32 = 0x10059;
 
 /// The lowest header SDK a core at `api` loads, when it refuses older ones.
 fn sdk_floor(api: u32) -> Option<u32> {

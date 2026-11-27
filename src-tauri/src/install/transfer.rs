@@ -54,13 +54,13 @@ pub(super) fn install(
         Upload {
             stage: "uploadLoader",
             name: "companion loader",
-            destination: "/cfw-loader.bin",
+            destination: "/Reprise/Firmware/loader.bin",
             bytes: &artifacts.companion,
         },
         Upload {
             stage: "uploadOsos",
             name: "RepriseOS",
-            destination: "/osos-cfw.bin",
+            destination: "/Reprise/Firmware/reprise.bin",
             bytes: &artifacts.osos,
         },
     ];

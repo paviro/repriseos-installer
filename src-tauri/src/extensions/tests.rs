@@ -175,6 +175,72 @@ fn extension_data_moves_to_reprise_on_firmware_that_reads_it() {
 }
 
 #[test]
+fn theme_packs_leave_an_ipod_whose_firmware_no_longer_reads_them() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::create_dir_all(root.join("iPod_Control/Device")).unwrap();
+    fs::write(root.join("cfw-loader.bin"), vec![0; 0x25220]).unwrap();
+    let themes = root.join("themes");
+    let packs = || {
+        for name in ["default", "dark"] {
+            fs::create_dir_all(themes.join(name)).unwrap();
+            fs::write(themes.join(name).join("theme.bin"), name).unwrap();
+        }
+    };
+    let probe = || read_mounts(vec![root.into()], None).unwrap().unwrap();
+
+    // The 0.4.0 firmware reads the packs: everything stays.
+    packs();
+    fs::write(root.join("osos-cfw.bin"), image("0.4.0")).unwrap();
+    assert!(probe().snapshot.is_some());
+    assert_eq!(
+        fs::read(themes.join("default/theme.bin")).unwrap(),
+        b"default"
+    );
+    assert_eq!(fs::read(themes.join("dark/theme.bin")).unwrap(), b"dark");
+
+    // Later firmware does not: the packs and the folder go, once.
+    fs::write(root.join("osos-cfw.bin"), image("Development")).unwrap();
+    assert!(probe().snapshot.is_some());
+    assert!(!themes.exists());
+    assert!(probe().snapshot.is_some());
+    assert!(!themes.exists());
+
+    // Other content under /themes stays, with the folder.
+    packs();
+    fs::write(themes.join("notes.txt"), b"mine").unwrap();
+    fs::create_dir_all(themes.join("mine")).unwrap();
+    fs::write(themes.join("mine/theme.bin"), b"custom").unwrap();
+    fs::write(themes.join("dark/extra"), b"kept").unwrap();
+    assert!(probe().snapshot.is_some());
+    assert!(!themes.join("default").exists());
+    assert!(!themes.join("dark/theme.bin").exists());
+    assert_eq!(fs::read(themes.join("dark/extra")).unwrap(), b"kept");
+    assert_eq!(fs::read(themes.join("notes.txt")).unwrap(), b"mine");
+    assert_eq!(fs::read(themes.join("mine/theme.bin")).unwrap(), b"custom");
+
+    // A link is not followed: its target keeps the pack.
+    #[cfg(unix)]
+    {
+        fs::remove_dir_all(&themes).unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join("theme.bin"), b"elsewhere").unwrap();
+        fs::create_dir_all(themes.join("default")).unwrap();
+        fs::write(themes.join("default/theme.bin"), b"default").unwrap();
+        std::os::unix::fs::symlink(outside.path(), themes.join("dark")).unwrap();
+        assert!(probe().snapshot.is_some());
+        assert!(!themes.join("default").exists());
+        assert!(fs::symlink_metadata(themes.join("dark"))
+            .unwrap()
+            .is_symlink());
+        assert_eq!(
+            fs::read(outside.path().join("theme.bin")).unwrap(),
+            b"elsewhere"
+        );
+    }
+}
+
+#[test]
 fn unknown_development_can_install_and_old_release_cannot() {
     let dev = firmware::identify(b"RepriseOS Development\0", "iPod".into()).unwrap();
     let ext = parse(&request("sample", "1.0.0", 81, None).data).unwrap();

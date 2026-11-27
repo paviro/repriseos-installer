@@ -94,6 +94,40 @@ pub(super) fn migrate_data(root: &Path, device: &DeviceInfo) {
     let _ = fs::remove_dir(&old);
 }
 
+/// Removes the theme packs a RepriseOS release through 0.4.0 read from
+/// /themes/default/theme.bin and /themes/dark/theme.bin, and the /themes
+/// folder once it is empty. Later firmware does not read them; only runs for
+/// such firmware. Other content under /themes stays, links are not followed
+/// and a failure only prints; the device still lists.
+pub(super) fn remove_themes(root: &Path, device: &DeviceInfo) {
+    let themes = root.join("themes");
+    if !device.reprise_data() || !directory(&themes) {
+        return;
+    }
+    let removed = (|| -> io::Result<()> {
+        for name in ["default", "dark"] {
+            let pack = themes.join(name);
+            if !directory(&pack) {
+                continue;
+            }
+            let file = pack.join("theme.bin");
+            match fs::symlink_metadata(&file) {
+                Ok(m) if m.is_file() && !link(&m) => fs::remove_file(&file)?,
+                Ok(_) => continue,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => (),
+                Err(e) => return Err(e),
+            }
+            // Stays if it holds anything else.
+            let _ = fs::remove_dir(&pack);
+        }
+        Ok(())
+    })();
+    if let Err(e) = removed {
+        eprintln!("Theme folder: could not remove {}: {e}", themes.display());
+    }
+    let _ = fs::remove_dir(&themes);
+}
+
 pub(super) fn write_file(path: &Path, bytes: &[u8], replace: bool) -> io::Result<()> {
     let dir = path.parent().ok_or(io::ErrorKind::InvalidInput)?;
     let mut tmp = tempfile::NamedTempFile::new_in(dir)?;

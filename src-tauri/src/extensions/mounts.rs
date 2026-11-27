@@ -211,6 +211,7 @@ pub(super) fn read_mounts(
     let snapshot = match discover(&roots)? {
         Some(m) => {
             super::storage::migrate_data(&m.root, &m.device);
+            super::storage::remove_themes(&m.root, &m.device);
             Some(Snapshot {
                 installed: inventory(&m.root)?,
                 token: m.token,

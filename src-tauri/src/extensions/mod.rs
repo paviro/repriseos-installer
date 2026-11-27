@@ -43,6 +43,14 @@ pub struct DeviceInfo {
 }
 
 impl DeviceInfo {
+    /// Whether the firmware keeps extension data under /Reprise/Data. Releases
+    /// through 0.4.0 read /Revola/Data.
+    fn reprise_data(&self) -> bool {
+        self.repriseos == "Development"
+            || semver::Version::parse(&self.repriseos)
+                .is_ok_and(|v| v.cmp_precedence(&semver::Version::new(0, 4, 0)).is_gt())
+    }
+
     fn allows(&self, pkg: &package::Package) -> bool {
         let dev = self.repriseos == "Development";
         if !dev

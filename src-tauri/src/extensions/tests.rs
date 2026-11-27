@@ -125,6 +125,56 @@ fn mounted_install_update_and_remove() {
 }
 
 #[test]
+fn extension_data_moves_to_reprise_on_firmware_that_reads_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::create_dir_all(root.join("iPod_Control/Device")).unwrap();
+    fs::write(root.join("cfw-loader.bin"), vec![0; 0x25220]).unwrap();
+    let old = root.join("Revola/Data/Extensions");
+    let new = root.join("Reprise/Data/Extensions");
+    let probe = || read_mounts(vec![root.into()], None).unwrap().unwrap();
+
+    // The 0.4.0 firmware reads /Revola/Data: the folder stays.
+    fs::create_dir_all(old.join("night-shift/.settings")).unwrap();
+    fs::write(old.join("night-shift/.settings/0001"), b"on").unwrap();
+    fs::write(root.join("osos-cfw.bin"), image("0.4.0")).unwrap();
+    assert!(probe().snapshot.is_some());
+    assert!(old.join("night-shift/.settings/0001").is_file());
+    assert!(!root.join("Reprise/Data").exists());
+
+    // Later firmware reads /Reprise/Data: the whole folder moves once.
+    fs::write(root.join("osos-cfw.bin"), image("Development")).unwrap();
+    assert!(probe().snapshot.is_some());
+    assert_eq!(
+        fs::read(new.join("night-shift/.settings/0001")).unwrap(),
+        b"on"
+    );
+    assert!(!root.join("Revola").join("Data").exists());
+    assert!(probe().snapshot.is_some());
+    assert_eq!(
+        fs::read(new.join("night-shift/.settings/0001")).unwrap(),
+        b"on"
+    );
+
+    // A folder already on the Reprise side is kept; the others still move.
+    fs::create_dir_all(old.join("night-shift/.settings")).unwrap();
+    fs::write(old.join("night-shift/.settings/0001"), b"stale").unwrap();
+    fs::create_dir_all(old.join("balance")).unwrap();
+    fs::write(old.join("balance/left"), b"3").unwrap();
+    assert!(probe().snapshot.is_some());
+    assert_eq!(
+        fs::read(new.join("night-shift/.settings/0001")).unwrap(),
+        b"on"
+    );
+    assert_eq!(fs::read(new.join("balance/left")).unwrap(), b"3");
+    assert_eq!(
+        fs::read(old.join("night-shift/.settings/0001")).unwrap(),
+        b"stale"
+    );
+    assert!(!old.join("balance").exists());
+}
+
+#[test]
 fn unknown_development_can_install_and_old_release_cannot() {
     let dev = firmware::identify(b"RepriseOS Development\0", "iPod".into()).unwrap();
     let ext = parse(&request("sample", "1.0.0", 81, None).data).unwrap();

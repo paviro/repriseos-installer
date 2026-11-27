@@ -199,6 +199,13 @@ test("failure message says what happened, what changed and how to go on", () => 
     ),
   );
   assert.deepEqual(
+    message({ stage: "removeFiles", error: "Upload helper failed (code -326, errno 0)" }),
+    stop(
+      "The iPod’s HFS+ volume was not cleanly unmounted. Nothing on it was changed.",
+      "Let the iPod boot and appear in Finder. Eject it, leave the cable connected, then enter DFU mode again.",
+    ),
+  );
+  assert.deepEqual(
     message({ stage: "decrypt", device_stopped: true, kept_percent: 30 }),
     retry(
       "Your iPod stopped responding. Nothing on it was changed. Decryption progress (30%) is saved.",

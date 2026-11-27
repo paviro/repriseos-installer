@@ -136,7 +136,7 @@ export function failureMessage(
   retry: boolean;
 } {
   if (
-    failure.stage === "storage" &&
+    (failure.stage === "storage" || failure.stage === "removeFiles") &&
     !failure.cancelled &&
     !failure.device_stopped &&
     /\(code -326, errno \d+\)/.test(failure.error)

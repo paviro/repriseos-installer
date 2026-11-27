@@ -3167,7 +3167,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "reprise-bundle"
 version = "0.3.0"
-source = "git+https://github.com/RepriseOS/repriseos.git?rev=1aab6f492e6e1580bb4b64af63590a137524268e#1aab6f492e6e1580bb4b64af63590a137524268e"
+source = "git+https://github.com/RepriseOS/repriseos.git?rev=2de282c56cbeec0de78b2f597857d55f07f85356#2de282c56cbeec0de78b2f597857d55f07f85356"
 dependencies = [
  "ed25519-dalek",
  "mu_uefi_decompress",
@@ -3186,7 +3186,7 @@ dependencies = [
 [[package]]
 name = "reprise-device"
 version = "0.3.0"
-source = "git+https://github.com/RepriseOS/repriseos.git?rev=1aab6f492e6e1580bb4b64af63590a137524268e#1aab6f492e6e1580bb4b64af63590a137524268e"
+source = "git+https://github.com/RepriseOS/repriseos.git?rev=2de282c56cbeec0de78b2f597857d55f07f85356#2de282c56cbeec0de78b2f597857d55f07f85356"
 dependencies = [
  "getrandom 0.3.4",
  "rusb",

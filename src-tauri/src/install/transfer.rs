@@ -92,8 +92,8 @@ pub(super) fn install(
     Ok(InstallOutcome::InstallerSent)
 }
 
-/// Sends `uploads` through one helper session and saves a report per verified file,
-/// also when a later file fails.
+/// Sends `uploads` through one helper session and saves a report per file of every
+/// batch whose last file was verified, also when a later batch fails.
 fn upload_batch(
     session: Session,
     helper: &UploadHelper,

@@ -25,6 +25,10 @@ pub struct InstallEvent {
 pub(super) enum InstallOutcome {
     InstallerSent,
     FilesUpdated,
+    /// The bootloader uninstaller was sent; the iPod restores Apple's bootloader.
+    UninstallerSent,
+    /// Apple's bootloader was already in place; only the files went.
+    FilesRemoved,
 }
 
 /// Why an install stopped, for the failure screen. `detail` is the full
@@ -82,6 +86,8 @@ pub struct InstallResult {
     backup_path: String,
     outcome: InstallOutcome,
     operation: Option<&'static str>,
+    /// What an uninstall could not delete from the iPod.
+    leftovers: Vec<&'static str>,
 }
 
 pub(super) struct Job<'a> {
@@ -95,6 +101,10 @@ pub(super) struct Job<'a> {
     cancellable: bool,
     operation: Option<&'static str>,
     bootloader_action: Option<BootloaderAction>,
+    /// What an uninstall could not delete; reported with the result.
+    pub(super) leftovers: Vec<&'static str>,
+    /// The iPod took over: it is receiving a bootloader image or a restart request.
+    handed_off: bool,
 }
 
 impl<'a> Job<'a> {
@@ -122,7 +132,22 @@ impl<'a> Job<'a> {
             cancellable: true,
             operation: None,
             bootloader_action: None,
+            leftovers: Vec::new(),
+            handed_off: false,
         })
+    }
+
+    /// Name the operation before its first stage, so a failure there reports it.
+    pub(super) fn begin_uninstall(&mut self) {
+        self.operation = Some("uninstall");
+    }
+
+    fn cancelled_error(&self) -> Box<dyn std::error::Error + Send + Sync> {
+        if self.operation == Some("uninstall") {
+            "Uninstall cancelled.".into()
+        } else {
+            "Installation cancelled.".into()
+        }
     }
 
     pub(super) fn plan(&mut self, action: BootloaderAction) -> Result<()> {
@@ -150,6 +175,32 @@ impl<'a> Job<'a> {
                 BootloaderAction::Upgrade => {
                     "UPDATE: bootloader differs from package; installing new bootloader after a fresh NOR backup"
                 }
+            },
+            None,
+        );
+        Ok(())
+    }
+
+    pub(super) fn plan_uninstall(
+        &mut self,
+        apple_bootloader: bool,
+        keep_files: bool,
+    ) -> Result<()> {
+        self.save_json(
+            "plan.json",
+            &serde_json::json!({
+                "operation": "uninstall",
+                "apple_bootloader": apple_bootloader,
+                "keep_files": keep_files,
+            }),
+        )?;
+        self.emit(
+            match (apple_bootloader, keep_files) {
+                (true, _) => "UNINSTALL: Apple bootloader detected; removing RepriseOS files only",
+                (false, false) => {
+                    "UNINSTALL: removing RepriseOS files, then restoring Apple's bootloader"
+                }
+                (false, true) => "UNINSTALL: keeping RepriseOS files; restoring Apple's bootloader",
             },
             None,
         );
@@ -193,7 +244,7 @@ impl<'a> Job<'a> {
             .map_err(|e| e.to_string())?
             .requested
         {
-            return Err("Installation cancelled.".into());
+            return Err(self.cancelled_error());
         }
         Ok(())
     }
@@ -314,16 +365,33 @@ impl<'a> Job<'a> {
         self.begin_handoff("bootloader", "Preparing bootloader installer")
     }
 
+    pub(super) fn begin_bootloader_removal(&mut self) -> Result<()> {
+        self.begin_handoff("bootloader", "Preparing bootloader uninstaller")
+    }
+
     pub(super) fn begin_restart(&mut self) -> Result<()> {
         self.begin_handoff("restart", "Restarting iPod")
     }
 
+    /// File removal cannot be cancelled: once files are gone the bootloader has
+    /// to be restored, and a cancel between the two would leave the iPod with
+    /// the RepriseOS bootloader and no firmware file.
+    pub(super) fn begin_file_removal(&mut self) -> Result<()> {
+        self.stop_cancelling("removeFiles", "Removing RepriseOS files")
+    }
+
     fn begin_handoff(&mut self, stage: &str, detail: &str) -> Result<()> {
+        self.stop_cancelling(stage, detail)?;
+        self.handed_off = true;
+        Ok(())
+    }
+
+    fn stop_cancelling(&mut self, stage: &str, detail: &str) -> Result<()> {
         self.stage(stage, detail)?;
         {
             let mut cancellation = self.state.cancellation.lock().map_err(|e| e.to_string())?;
             if cancellation.requested {
-                return Err("Installation cancelled.".into());
+                return Err(self.cancelled_error());
             }
             cancellation.allowed = false;
         }
@@ -339,12 +407,17 @@ impl<'a> Job<'a> {
                 self.log(match outcome {
                     InstallOutcome::FilesUpdated => "UPDATE COMPLETE: disk files verified; NOR unchanged; restart requested; boot not verified",
                     InstallOutcome::InstallerSent => "BOOTLOADER HANDOFF: disk files verified; NOR installer sent; NOR completion not read back",
+                    InstallOutcome::UninstallerSent => "UNINSTALL HANDOFF: NOR uninstaller sent; NOR completion not read back",
+                    InstallOutcome::FilesRemoved => "UNINSTALL COMPLETE: disk files removed; NOR unchanged; restart requested; boot not verified",
                 });
+                if !self.leftovers.is_empty() {
+                    self.log(format!("Left on the iPod: {}", self.leftovers.join(", ")));
+                }
                 // The iPod may already be installing the bootloader, so a log that
                 // cannot be written must not turn the result into a failure.
                 let saved = save_json(
                     &self.directory.join("result.json"),
-                    &serde_json::json!({"state": outcome, "operation": self.operation, "bootloader_action": self.bootloader_action}),
+                    &serde_json::json!({"state": outcome, "operation": self.operation, "bootloader_action": self.bootloader_action, "leftovers": self.leftovers}),
                 );
                 if let Err(e) = saved.and_then(|()| Ok(self.journal.sync_all()?)) {
                     self.log(format!("Could not save the result: {e}"));
@@ -353,11 +426,12 @@ impl<'a> Job<'a> {
                     backup_path: self.directory.to_string_lossy().into_owned(),
                     outcome,
                     operation: self.operation,
+                    leftovers: self.leftovers,
                 })
             }
             Err(error) => {
                 // After the handoff the iPod may be installing the bootloader.
-                let next = if !self.cancellable {
+                let next = if self.handed_off {
                     "Leave the iPod connected until it restarts."
                 } else {
                     "Re-enter DFU before retrying."

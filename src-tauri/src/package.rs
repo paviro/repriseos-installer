@@ -89,11 +89,13 @@ pub async fn choose_local_package(app: AppHandle) -> Result<Option<PackageInfo>,
     .map_err(|e| e.to_string())?
 }
 
+/// Prepare the chosen or downloaded package for the selected IPSW's target, or
+/// without an IPSW for the installer's own target, which an uninstall needs.
 #[tauri::command]
 pub async fn prepare_package(
     app: AppHandle,
     local_digest: Option<String>,
-    firmware_sha256: String,
+    firmware_sha256: Option<String>,
 ) -> Result<PackageInfo, String> {
     let operation = app
         .state::<crate::device::UsbState>()
@@ -111,8 +113,13 @@ pub async fn prepare_package(
             .0
             .try_lock()
             .map_err(|_| "A package is still loading.")?;
-        let ipsw = app.state::<FirmwareState>().selected(&firmware_sha256)?;
-        let target = ipsw.metadata.target().map_err(|e| e.to_string())?;
+        let ipsw = firmware_sha256
+            .map(|sha256| app.state::<FirmwareState>().selected(&sha256))
+            .transpose()?;
+        let target = match &ipsw {
+            Some(ipsw) => ipsw.metadata.target().map_err(|e| e.to_string())?,
+            None => reprise_device::firmware::current(),
+        };
         if let Some(digest) = local_digest {
             let bundle = selected
                 .as_ref()

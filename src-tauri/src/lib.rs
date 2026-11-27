@@ -47,6 +47,7 @@ pub fn run() {
             extensions::write_extension,
             extensions::remove_extension,
             install::install,
+            install::uninstall::uninstall,
             install::diagnostics::save_debug_zip,
             updates::check_installer_update,
             updates::install_installer_update,

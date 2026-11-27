@@ -37,6 +37,90 @@ fn bootloader_handoff_honors_pending_cancellation_and_closes_further_requests() 
 }
 
 #[test]
+fn file_removal_closes_cancelling_without_counting_as_a_handoff() {
+    let state = InstallState::default();
+    *state.cancellation.lock().unwrap() = super::super::Cancellation {
+        requested: true,
+        allowed: true,
+    };
+    let mut removal = job(&state);
+    let directory = removal.directory.clone();
+    removal.begin_uninstall();
+    assert_eq!(
+        removal.begin_file_removal().unwrap_err().to_string(),
+        "Uninstall cancelled."
+    );
+    assert!(state.cancellation.lock().unwrap().allowed);
+
+    state.cancellation.lock().unwrap().requested = false;
+    removal.begin_file_removal().unwrap();
+    assert!(!state.cancellation.lock().unwrap().allowed);
+    let events: Vec<serde_json::Value> = fs::read_to_string(directory.join("events.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(events.last().unwrap()["stage"], "removeFiles");
+    assert_eq!(events.last().unwrap()["cancellable"], false);
+    let error = removal
+        .finish(Err("Disconnected".into()))
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(error.ends_with("Re-enter DFU before retrying."));
+    fs::remove_dir_all(directory).unwrap();
+
+    let mut handoff = job(&state);
+    let directory = handoff.directory.clone();
+    handoff.begin_bootloader_removal().unwrap();
+    let error = handoff
+        .finish(Err("Disconnected".into()))
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(error.ends_with("Leave the iPod connected until it restarts."));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn an_uninstall_is_named_before_its_first_stage() {
+    let state = InstallState::default();
+    let mut uninstall = job(&state);
+    let directory = uninstall.directory.clone();
+    uninstall.begin_uninstall();
+    uninstall
+        .stage("checkBootloader", "Checking installed bootloader")
+        .unwrap();
+    state.cancellation.lock().unwrap().requested = true;
+    let cancelled = uninstall
+        .stage("backup", "Reading boot firmware")
+        .unwrap_err();
+    assert_eq!(cancelled.to_string(), "Uninstall cancelled.");
+    state.cancellation.lock().unwrap().requested = false;
+    let error = uninstall
+        .finish(Err("Disconnected".into()))
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(error.starts_with("UNINSTALL failed during checkBootloader: Disconnected"));
+    let saved: serde_json::Value =
+        serde_json::from_slice(&fs::read(directory.join("result.json")).unwrap()).unwrap();
+    assert_eq!(saved["operation"], "uninstall");
+    fs::remove_dir_all(directory).unwrap();
+
+    let mut install = job(&state);
+    let directory = install.directory.clone();
+    state.cancellation.lock().unwrap().requested = true;
+    let cancelled = install
+        .stage("backup", "Reading boot firmware")
+        .unwrap_err();
+    assert_eq!(cancelled.to_string(), "Installation cancelled.");
+    state.cancellation.lock().unwrap().requested = false;
+    drop(install);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn outcomes_preserve_result_files_and_recovery_details() {
     let state = InstallState::default();
     for failed in [false, true] {

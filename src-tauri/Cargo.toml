@@ -14,8 +14,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-reprise-bundle = { git = "https://github.com/RepriseOS/repriseos.git", rev = "53985e28452f9948533aae7ac9fc101a205bea71" }
-reprise-device = { git = "https://github.com/RepriseOS/repriseos.git", rev = "53985e28452f9948533aae7ac9fc101a205bea71" }
+reprise-bundle = { git = "https://github.com/RepriseOS/repriseos.git", rev = "6f7bb169023e58b9cf59e65e917f90c2c9451848" }
+reprise-device = { git = "https://github.com/RepriseOS/repriseos.git", rev = "6f7bb169023e58b9cf59e65e917f90c2c9451848" }
 # Build reprise-device's libusb dependency for each target architecture.
 rusb = { version = "0.9.4", features = ["vendored"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }

@@ -247,19 +247,19 @@ test("experimental hardware scenario requires a current explicit approval", asyn
 test("extension scenarios simulate a mounted iPod and its copies", async () => {
   const backend = createMockBackend(findScenario("extensions-older-builds"), immediate);
   const first = await backend.invoke("read_extension_device", {});
-  assert.equal(first.snapshot.device.sdkFloor, "1.86");
+  assert.equal(first.snapshot.device.sdkFloor, "1.89");
   assert.deepEqual(
     first.snapshot.installed.map((copy) => [copy.id, copy.sdk, copy.library, copy.requires]),
     [
       ["night-shift", "1.84", false, []],
       ["dsp", "1.85", true, []],
-      ["crossfeed", "1.86", false, ["dsp"]],
+      ["crossfeed", "1.89", false, ["dsp"]],
     ],
   );
   assert.equal(await backend.invoke("read_extension_device", { knownMounts: first.mounts }), null);
   // A package header carries the SDK at byte 8 and the manifest's minimum API at byte 36.
   const data = new Array(64).fill(0);
-  data.splice(8, 4, 0x56, 0, 1, 0);
+  data.splice(8, 4, 0x59, 0, 1, 0);
   data.splice(36, 4, 0x54, 0, 1, 0);
   await backend.invoke("write_extension", { package: { id: "dsp", version: "0.1.1", data } });
   await backend.invoke("write_extension", { package: { id: "balance", version: "0.1.0", data } });
@@ -277,9 +277,9 @@ test("extension scenarios simulate a mounted iPod and its copies", async () => {
       copy.requires,
     ]),
     [
-      ["dsp", "0.1.1", "1.84", "1.86", []],
-      ["crossfeed", "0.1.1", "1.84", "1.86", ["dsp"]],
-      ["balance", "0.1.0", "1.84", "1.86", []],
+      ["dsp", "0.1.1", "1.84", "1.89", []],
+      ["crossfeed", "0.1.1", "1.84", "1.89", ["dsp"]],
+      ["balance", "0.1.0", "1.84", "1.89", []],
     ],
   );
   await backend.invoke("eject_and_reboot", {});

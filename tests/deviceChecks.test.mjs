@@ -4,10 +4,12 @@ import { setImmediate } from "node:timers/promises";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import {
   acceptUnknownHardware,
+  beginMacDfuGuard,
   checkIds,
   discoverDevices,
   getCheckState,
   retryDeviceChecks,
+  setMacDfuGuardWanted,
   startDeviceChecks,
 } from "../src/lib/deviceChecks.ts";
 
@@ -258,4 +260,44 @@ test("unknown hardware requires explicit acceptance and ordinary retries clear i
   await setImmediate();
   acceptUnknownHardware();
   assert.equal(getCheckState().running, false);
+});
+
+test("takes the macOS DFU guard only while a screen wants it", async () => {
+  const commands = [];
+  mockIPC((command) => {
+    commands.push(command);
+    return null;
+  });
+  await beginMacDfuGuard();
+  assert.deepEqual(commands, []);
+  await setMacDfuGuardWanted(true);
+  await beginMacDfuGuard();
+  await beginMacDfuGuard();
+  assert.deepEqual(commands, ["mac_dfu_guard_begin", "mac_dfu_guard_begin"]);
+  await setMacDfuGuardWanted(false);
+  await beginMacDfuGuard();
+  assert.deepEqual(commands, ["mac_dfu_guard_begin", "mac_dfu_guard_begin", "mac_dfu_guard_end"]);
+});
+
+test("a guard that cannot be set is logged once and the scan goes on", async () => {
+  const { getSessionLog } = await import("../src/lib/sessionLog.ts");
+  const before = getSessionLog().length;
+  let warning = "macOS DFU guard lock file: Permission denied";
+  mockIPC((command) => {
+    if (command === "mac_dfu_guard_begin") return warning;
+    if (command === "mac_dfu_guard_end") return;
+    throw new Error(`unexpected ${command}`);
+  });
+  await setMacDfuGuardWanted(true);
+  await beginMacDfuGuard();
+  await beginMacDfuGuard();
+  const logged = getSessionLog().slice(before);
+  assert.equal(logged.length, 1);
+  assert.match(logged[0], /Permission denied; macOS may move the iPod out of DFU/);
+  warning = null;
+  await beginMacDfuGuard();
+  warning = "macOS DFU guard: could not write com.apple.AMPDevicesAgent";
+  await beginMacDfuGuard();
+  assert.equal(getSessionLog().length - before, 2);
+  await setMacDfuGuardWanted(false);
 });

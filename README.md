@@ -18,6 +18,13 @@ supported model, even if the iPod runs older Apple firmware.
 Follow the DFU instructions in the app. The installer downloads and verifies the
 latest RepriseOS package.
 
+On macOS, the installer keeps the system from moving the iPod out of DFU mode
+while the DFU, checks and installation screens are shown: it sets the
+`ignore-devices` user default of `AMPDevicesAgent` and `AMPDeviceDiscoveryAgent`
+and puts the previous values back afterwards, or on the next start after a
+crash. Other Apple devices are also ignored by those agents while it is set.
+When the keys cannot be set, the session log says so and the install goes on.
+
 ## Manage extensions
 
 Connect your iPod running RepriseOS 0.4.0 and let the volume mount.

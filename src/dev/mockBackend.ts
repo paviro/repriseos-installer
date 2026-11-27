@@ -50,6 +50,10 @@ export function createMockBackend(
           );
         usbReady = true;
         return;
+      case "mac_dfu_guard_begin":
+        return null;
+      case "mac_dfu_guard_end":
+        return;
       case "discover_devices":
         if (scenario.discovery === "denied")
           throw new Error("USB discovery failed: access denied.");

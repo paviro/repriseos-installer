@@ -1,5 +1,5 @@
 import React from "react";
-import { type DeviceInfo, discoverDevices } from "../lib/deviceChecks";
+import { beginMacDfuGuard, type DeviceInfo, discoverDevices } from "../lib/deviceChecks";
 import { errorDetail } from "../lib/errors";
 import { appendSessionLog } from "../lib/sessionLog";
 
@@ -15,6 +15,7 @@ export function useDfuDetection(enabled: boolean) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       try {
+        await beginMacDfuGuard();
         const found = await discoverDevices();
         if (!active) return;
         setDevices(found);

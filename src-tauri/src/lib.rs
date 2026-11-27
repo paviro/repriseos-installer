@@ -9,6 +9,10 @@ mod usb_permissions;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    reprise_device::mac_dfu_guard::install_panic_hook();
+    if let Err(error) = reprise_device::mac_dfu_guard::recover_stale() {
+        eprintln!("macOS DFU guard recovery: {error}");
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -39,6 +43,8 @@ pub fn run() {
             usb_permissions::enable_usb_access,
             device::discover_devices,
             device::check_device,
+            device::mac_dfu_guard_begin,
+            device::mac_dfu_guard_end,
             package::choose_local_package,
             package::prepare_package,
             firmware::choose_firmware,
@@ -58,6 +64,10 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             use tauri::Manager;
+            // Tauri exits the process without dropping managed state.
+            if let tauri::RunEvent::Exit = event {
+                let _ = reprise_device::mac_dfu_guard::restore_now();
+            }
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
                 if app
                     .state::<install::InstallState>()

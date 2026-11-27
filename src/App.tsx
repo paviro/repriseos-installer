@@ -12,7 +12,8 @@ import { SuccessScreen } from "./components/SuccessScreen";
 import { UsbPermissionsScreen } from "./components/UsbPermissionsScreen";
 import { DebugLog } from "./components/ui/DebugLog";
 import { ExternalLink } from "./components/ui/ExternalLink";
-import { startDeviceChecks } from "./lib/deviceChecks";
+import { setMacDfuGuardWanted, startDeviceChecks } from "./lib/deviceChecks";
+import { errorDetail } from "./lib/errors";
 import type { FirmwareInfo } from "./lib/firmware";
 import { startInstallation } from "./lib/installation";
 import type { PackageInfo } from "./lib/package";
@@ -66,6 +67,15 @@ const App: React.FC<AppProps> = ({ initial }) => {
     startInstallation(firmware, packageDigest);
     setScreen("installation");
   };
+
+  // DFU polling starts the guard; it ends once the flow leaves the iPod. A
+  // layout effect runs before the DFU screen's first poll.
+  const usesDfu = (["dfu", "checks", "installation"] as Screen[]).includes(screen);
+  React.useLayoutEffect(() => {
+    setMacDfuGuardWanted(usesDfu).catch((error) =>
+      appendSessionLog(`macOS DFU guard: ${errorDetail(error)}`),
+    );
+  }, [usesDfu]);
 
   return (
     <main

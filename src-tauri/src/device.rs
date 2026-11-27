@@ -1,4 +1,6 @@
-use reprise_device::{CheckId, CheckReport, DeviceInfo, DeviceSelector, Event, Session};
+use reprise_device::{
+    mac_dfu_guard::MacDfuGuard, CheckId, CheckReport, DeviceInfo, DeviceSelector, Event, Session,
+};
 use serde::Serialize;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -22,6 +24,7 @@ pub struct UsbState {
     busy: Arc<AtomicBool>,
     next_check: AtomicU64,
     pub checked: Mutex<Option<CheckedDevice>>,
+    mac_dfu_guard: Mutex<Option<MacDfuGuard>>,
 }
 
 pub struct CheckedDevice {
@@ -79,6 +82,40 @@ pub async fn discover_devices(state: State<'_, UsbState>) -> Result<Vec<DeviceIn
     })
     .await
     .map_err(|e| CommandError::new(CheckId::Usb, e))?
+}
+
+/// Keep macOS from moving the iPod out of DFU, from the DFU guide until the
+/// flow ends. Called before every DFU scan, so it retries a refusal. Another
+/// installer holding the keys is an error; any other failure comes back as a
+/// warning, since the flow works without the guard.
+#[tauri::command]
+pub fn mac_dfu_guard_begin(state: State<'_, UsbState>) -> Result<Option<String>, CommandError> {
+    let mut guard = state
+        .mac_dfu_guard
+        .lock()
+        .map_err(|e| CommandError::new(CheckId::Usb, e))?;
+    if guard.is_none() || !reprise_device::mac_dfu_guard::held() {
+        *guard = None;
+        match MacDfuGuard::acquire() {
+            Ok(acquired) => *guard = Some(acquired),
+            Err(error @ reprise_device::Error::OtherInstaller) => {
+                return Err(CommandError::new(CheckId::Usb, error));
+            }
+            Err(error) => return Ok(Some(error.to_string())),
+        }
+    }
+    Ok(None)
+}
+
+#[tauri::command]
+pub fn mac_dfu_guard_end(state: State<'_, UsbState>) -> Result<(), CommandError> {
+    let guard = state
+        .mac_dfu_guard
+        .lock()
+        .map_err(|e| CommandError::new(CheckId::Usb, e))?
+        .take();
+    drop(guard);
+    Ok(())
 }
 
 #[tauri::command]

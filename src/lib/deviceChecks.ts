@@ -82,6 +82,32 @@ export function subscribeToChecks(listener: () => void) {
   };
 }
 
+// Whether the current screen works with the iPod. A screen that is animating
+// out still polls, and must not take the guard again after the flow left.
+let macDfuGuardWanted = false;
+
+let macDfuGuardWarning: string | null = null;
+
+/**
+ * Keeps macOS from moving the iPod out of DFU; see mac_dfu_guard.rs. Rejects
+ * while another installer holds the keys. Any other failure is logged once
+ * and the scan goes on without the guard.
+ */
+export async function beginMacDfuGuard(): Promise<void> {
+  if (!backendAvailable() || !macDfuGuardWanted) return;
+  const warning = await invoke<string | null>("mac_dfu_guard_begin");
+  if (warning && warning !== macDfuGuardWarning) {
+    appendSessionLog(`${warning}; macOS may move the iPod out of DFU.`);
+  }
+  macDfuGuardWarning = warning;
+}
+
+export function setMacDfuGuardWanted(wanted: boolean): Promise<void> {
+  macDfuGuardWanted = wanted;
+  if (!wanted) macDfuGuardWarning = null;
+  return backendAvailable() && !wanted ? invoke("mac_dfu_guard_end") : Promise.resolve();
+}
+
 let discovery: Promise<DeviceInfo[]> | null = null;
 export function discoverDevices(): Promise<DeviceInfo[]> {
   if (!backendAvailable()) return Promise.reject("Open the desktop installer to detect your iPod.");

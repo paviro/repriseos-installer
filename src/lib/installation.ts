@@ -8,6 +8,8 @@ export interface InstallEvent {
   detail: string;
   completed: number | null;
   total: number | null;
+  /** Share of the whole operation done, 0..1. */
+  progress: number;
   cancellable: boolean;
   diagnostic?: boolean;
 }
@@ -66,7 +68,14 @@ let state: InstallationState = {
   running: false,
   startedAt: 0,
   finishedAt: null,
-  event: { stage: "prepare", detail: "", completed: null, total: null, cancellable: true },
+  event: {
+    stage: "prepare",
+    detail: "",
+    completed: null,
+    total: null,
+    progress: 0,
+    cancellable: true,
+  },
   failure: null,
   complete: false,
   cancelling: false,
@@ -226,6 +235,7 @@ function startJob(
       detail: operation === "uninstall" ? "Preparing uninstall" : "",
       completed: null,
       total: null,
+      progress: 0,
       cancellable: true,
     },
     failure: null,

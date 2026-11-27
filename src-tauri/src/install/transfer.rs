@@ -9,6 +9,25 @@ use reprise_bundle::{
 use reprise_device::{Session, UploadFile, UploadHelper, UploadOptions};
 use std::io::Cursor;
 
+/// Each upload costs about three seconds of fixed work plus a second per MB,
+/// so a file weighs its bytes plus this many.
+const FILE_OVERHEAD_BYTES: u64 = 3 << 20;
+const BYTES_PER_SECOND: u64 = 1 << 20;
+
+/// Share of the upload phase spent hashing the files before the helper launches.
+const HASH_SHARE: f64 = 0.1;
+
+/// Where each transfer sub-stage lies within a file's share, as (start, end).
+fn band(stage: &str) -> Option<(f64, f64)> {
+    Some(match stage {
+        "upload" => (0.0, 0.55),
+        "write" => (0.55, 0.9),
+        "verify" => (0.9, 1.0),
+        "complete" => (1.0, 1.0),
+        _ => return None,
+    })
+}
+
 pub(super) fn inspect_storage(
     session: Session,
     helper: &UploadHelper,
@@ -64,12 +83,27 @@ pub(super) fn install(
             bytes: &artifacts.osos,
         },
     ];
+    let weights: Vec<u64> = uploads
+        .iter()
+        .map(|u| FILE_OVERHEAD_BYTES + u.bytes.len() as u64)
+        .collect();
+    job.set_weight(
+        "upload",
+        (weights.iter().sum::<u64>() / BYTES_PER_SECOND) as u32,
+    );
     if helper.supports_batch_upload() {
-        session = upload_batch(session, helper, &uploads, job)?;
+        session = upload_batch(session, helper, &uploads, &weights, 0, job)?;
     } else {
         // Older packages' helpers take one file per launch.
-        for file in &uploads {
-            session = upload_batch(session, helper, std::slice::from_ref(file), job)?;
+        for (first, file) in uploads.iter().enumerate() {
+            session = upload_batch(
+                session,
+                helper,
+                std::slice::from_ref(file),
+                &weights,
+                first,
+                job,
+            )?;
         }
     }
     if action == assembly::BootloaderAction::Keep {
@@ -93,13 +127,17 @@ pub(super) fn install(
 }
 
 /// Sends `uploads` through one helper session and saves a report per file of every
-/// batch whose last file was verified, also when a later batch fails.
+/// batch whose last file was verified, also when a later batch fails. `weights`
+/// covers every file of the install and `first` is the index of `uploads[0]` in it.
 fn upload_batch(
     session: Session,
     helper: &UploadHelper,
     uploads: &[Upload<'_>],
+    weights: &[u64],
+    first: usize,
     job: &mut Job<'_>,
 ) -> Result<Session> {
+    let total_weight: u64 = weights.iter().sum();
     let mut cursors: Vec<Cursor<&[u8]>> = uploads.iter().map(|u| Cursor::new(u.bytes)).collect();
     let mut files: Vec<UploadFile<'_>> = cursors
         .iter_mut()
@@ -126,6 +164,20 @@ fn upload_batch(
                 current = p.file;
                 job.stage(stage, &format!("Preparing {name}"))
                     .map_err(|e| reprise_device::Error::Invalid(e.to_string()))?;
+            }
+            if p.total > 0 {
+                let file = first + p.file;
+                let before: u64 = weights[..file].iter().sum();
+                let through = |within: f64| {
+                    (before as f64 + weights[file] as f64 * within) / total_weight as f64
+                };
+                let count = p.completed as f64 / p.total as f64;
+                if p.stage == "hash" {
+                    job.set_fraction(HASH_SHARE * through(count));
+                } else if let Some((start, end)) = band(p.stage) {
+                    let within = start + (end - start) * count;
+                    job.set_fraction(HASH_SHARE + (1.0 - HASH_SHARE) * through(within));
+                }
             }
             let detail = match p.stage {
                 "hash" => format!("Checking {name}"),

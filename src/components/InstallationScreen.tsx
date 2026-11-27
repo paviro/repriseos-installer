@@ -64,10 +64,7 @@ const InstallationScreen: React.FC<IInstallationScreenProps> = ({
     id: `${state.event.stage}:${installationLabel(state.event)}`,
     label: installationLabel(state.event),
     complete: state.complete,
-    percentage:
-      state.event.total && state.event.completed !== null
-        ? Math.min(100, Math.floor((state.event.completed * 100) / state.event.total))
-        : null,
+    percentage: state.complete ? 100 : Math.min(100, Math.floor(state.event.progress * 100)),
   };
   const uninstall = state.operation === "uninstall";
   const failure = state.failure && failureMessage(state.failure, { uninstall });
@@ -97,7 +94,6 @@ const InstallationScreen: React.FC<IInstallationScreenProps> = ({
             label={snapshot.label}
             value={snapshot.percentage}
             complete={snapshot.complete}
-            stage={snapshot.id}
           />
           <div className="mt-3 flex min-h-6 items-center justify-center gap-3 text-[13px] text-body">
             <div aria-live="polite" aria-atomic="true">
@@ -115,11 +111,9 @@ const InstallationScreen: React.FC<IInstallationScreenProps> = ({
                 </motion.span>
               </AnimatePresence>
             </div>
-            {snapshot.percentage !== null && (
-              <span className="min-w-8 text-right font-medium tabular-nums text-ink">
-                {snapshot.percentage}%
-              </span>
-            )}
+            <span className="min-w-8 text-right font-medium tabular-nums text-ink">
+              {snapshot.percentage}%
+            </span>
           </div>
           <p className="mt-2 text-[12px] tabular-nums text-muted">
             Elapsed time{" "}

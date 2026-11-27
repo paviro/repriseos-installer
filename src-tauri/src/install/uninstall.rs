@@ -56,8 +56,10 @@ fn run(
         &directory.join("inputs.json"),
         &serde_json::json!({"bundle": bundle.digest(), "keep_files": keep_files}),
     )?;
-    let mut job = Job::new(state, channel, directory)?;
-    job.begin_uninstall();
+    let mut job = Job::new(state, channel, directory, "uninstall")?;
+    if keep_files {
+        job.set_weight("removeFiles", 0);
+    }
     job.log(format!(
         "Installer {}; uninstall with package {} ({}); keep files: {keep_files}",
         env!("CARGO_PKG_VERSION"),
@@ -75,7 +77,12 @@ fn run(
         let mut session = checked.session;
         job.stage("checkBootloader", "Checking installed bootloader")?;
         let bootloader = session.inspect_bootloader(|p| {
-            job.progress("Verifying installed bootloader", p.completed, p.total)
+            job.progress_in(
+                "Verifying installed bootloader",
+                (0.0, 1.0),
+                p.completed,
+                p.total,
+            )
         })?;
         job.save_json("bootloader.json", &bootloader)?;
         job.log(format!(

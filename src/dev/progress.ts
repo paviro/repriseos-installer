@@ -37,13 +37,14 @@ export async function simulateInstallation(
   wait: Wait,
   cancelled: () => boolean,
 ) {
-  for (const [stage, detail] of stages) {
+  for (const [index, [stage, detail]] of stages.entries()) {
     for (const completed of [0, 25, 50, 75, 100]) {
       channel.onmessage({
         stage: stage === "verify" ? "uploadOsos" : stage,
         detail,
         completed,
         total: 100,
+        progress: (index + completed / 100) / stages.length,
         cancellable: stage !== "bootloader",
       });
       await wait();
@@ -77,14 +78,15 @@ export async function simulateUninstall(
   cancelled: () => boolean,
   keepFiles: boolean,
 ) {
-  for (const [stage, detail] of uninstallStages) {
-    if (keepFiles && stage === "removeFiles") continue;
+  const stages = uninstallStages.filter(([stage]) => !(keepFiles && stage === "removeFiles"));
+  for (const [index, [stage, detail]] of stages.entries()) {
     for (const completed of [0, 50, 100]) {
       channel.onmessage({
         stage,
         detail,
         completed,
         total: 100,
+        progress: (index + completed / 100) / stages.length,
         cancellable: stage === "checkBootloader" || stage === "backup",
       });
       await wait();

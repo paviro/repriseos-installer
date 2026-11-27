@@ -81,7 +81,6 @@ export const InstallerUpdate: React.FC<Props> = ({
             label="Installer update download"
             value={progress}
             complete={false}
-            stage={status}
           />
         </div>
       )}

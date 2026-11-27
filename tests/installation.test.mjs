@@ -43,7 +43,14 @@ test("starts once, forwards selected hashes, and waits for backend completion", 
     ["uploadOsos", "Reconnecting to iPod"],
     ["bootloader", "Sending bootloader installer"],
   ]) {
-    channel.onmessage({ stage, detail, completed: 100, total: 100, cancellable: true });
+    channel.onmessage({
+      stage,
+      detail,
+      completed: 100,
+      total: 100,
+      progress: 0.5,
+      cancellable: true,
+    });
     assert.equal(installationLabel(getInstallationState().event), detail);
   }
   const progress = getInstallationState();
@@ -52,6 +59,7 @@ test("starts once, forwards selected hashes, and waits for backend completion", 
     detail: "Helper USB interface opened; bulk OUT endpoint 0x02",
     completed: null,
     total: null,
+    progress: 0.5,
     cancellable: false,
     diagnostic: true,
   });
@@ -108,6 +116,7 @@ test("cancellation waits for cleanup and is disabled during NOR installation", a
     detail: "Installing",
     completed: null,
     total: null,
+    progress: 0.9,
     cancellable: false,
   });
   await cancelInstallation();

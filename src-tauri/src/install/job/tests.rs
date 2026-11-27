@@ -1,9 +1,13 @@
 use super::*;
 
 fn job(state: &InstallState) -> Job<'_> {
+    job_for(state, "install")
+}
+
+fn job_for<'a>(state: &'a InstallState, operation: &str) -> Job<'a> {
     let device = format!("reprise-job-test-{:?}", std::thread::current().id());
     let directory = backup_directory(&std::env::temp_dir(), device.as_bytes()).unwrap();
-    Job::new(state, Channel::new(|_| Ok(())), directory).unwrap()
+    Job::new(state, Channel::new(|_| Ok(())), directory, operation).unwrap()
 }
 
 #[test]
@@ -43,9 +47,8 @@ fn file_removal_closes_cancelling_without_counting_as_a_handoff() {
         requested: true,
         allowed: true,
     };
-    let mut removal = job(&state);
+    let mut removal = job_for(&state, "uninstall");
     let directory = removal.directory.clone();
-    removal.begin_uninstall();
     assert_eq!(
         removal.begin_file_removal().unwrap_err().to_string(),
         "Uninstall cancelled."
@@ -85,9 +88,8 @@ fn file_removal_closes_cancelling_without_counting_as_a_handoff() {
 #[test]
 fn an_uninstall_is_named_before_its_first_stage() {
     let state = InstallState::default();
-    let mut uninstall = job(&state);
+    let mut uninstall = job_for(&state, "uninstall");
     let directory = uninstall.directory.clone();
-    uninstall.begin_uninstall();
     uninstall
         .stage("checkBootloader", "Checking installed bootloader")
         .unwrap();
@@ -193,6 +195,7 @@ fn nor_snapshots_are_reused_verified_and_separated_by_device_and_content() {
             &state,
             Channel::new(|_| Ok(())),
             backup_directory(&root, device).unwrap(),
+            "install",
         )
         .unwrap()
     };
@@ -269,6 +272,7 @@ fn firmware_is_replaced_per_device_while_run_reports_remain() {
             &state,
             Channel::new(|_| Ok(())),
             backup_directory(&root, device).unwrap(),
+            "install",
         )
         .unwrap();
         artifacts.osos = osos.to_vec();
@@ -301,7 +305,7 @@ fn update_plan_and_completion_are_preserved_in_support_logs() {
     ] {
         let mut job = job(&state);
         let directory = job.directory.clone();
-        job.plan(action).unwrap();
+        job.plan(action, (false, false)).unwrap();
         let outcome = if action == BootloaderAction::Keep {
             InstallOutcome::FilesUpdated
         } else {
@@ -330,6 +334,37 @@ fn update_plan_and_completion_are_preserved_in_support_logs() {
         }));
         fs::remove_dir_all(directory).unwrap();
     }
+}
+
+#[test]
+fn a_kept_files_uninstall_plans_without_the_removal_phase() {
+    let state = InstallState::default();
+    let mut job = job_for(&state, "uninstall");
+    let directory = job.directory.clone();
+    job.set_weight("removeFiles", 0);
+    job.stage("checkBootloader", "Checking installed bootloader")
+        .unwrap();
+    job.plan_uninstall(false, true).unwrap();
+    job.stage("backup", "Reading boot firmware").unwrap();
+    job.set_fraction(1.0);
+    job.begin_bootloader_removal().unwrap();
+    let plan: serde_json::Value =
+        serde_json::from_slice(&fs::read(directory.join("plan.json")).unwrap()).unwrap();
+    assert_eq!(plan["keep_files"], true);
+    let events: Vec<serde_json::Value> = fs::read_to_string(directory.join("events.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert!(events.iter().any(|event| event["detail"]
+        == "UNINSTALL: keeping RepriseOS files; restoring Apple's bootloader"));
+    // Without the removal phase the backup ends just short of the handoff's share.
+    let handoff = events.last().unwrap();
+    assert_eq!(handoff["stage"], "bootloader");
+    let total = (15 + 148 + 3) as f64;
+    assert!((handoff["progress"].as_f64().unwrap() - (15.0 + 148.0) / total).abs() < 1e-9);
+    drop(job);
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

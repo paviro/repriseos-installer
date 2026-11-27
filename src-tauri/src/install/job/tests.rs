@@ -193,16 +193,16 @@ fn firmware_is_replaced_per_device_while_run_reports_remain() {
         reports.push(job.directory.join("assembly.json"));
     }
     assert_eq!(
-        fs::read(root.join("backups/61/firmware/osos-cfw.bin")).unwrap(),
+        fs::read(root.join("backups/61/firmware/reprise.bin")).unwrap(),
         b"latest"
     );
     assert_eq!(
-        fs::read(root.join("backups/62/firmware/osos-cfw.bin")).unwrap(),
+        fs::read(root.join("backups/62/firmware/reprise.bin")).unwrap(),
         b"other"
     );
     for report in reports {
         let json: serde_json::Value = serde_json::from_slice(&fs::read(report).unwrap()).unwrap();
-        assert!(json["files"]["osos-cfw.bin"]["sha256"].is_string());
+        assert!(json["files"]["reprise.bin"]["sha256"].is_string());
     }
     fs::remove_dir_all(root).unwrap();
 }

@@ -209,11 +209,14 @@ pub(super) fn read_mounts(
         return Ok(None);
     }
     let snapshot = match discover(&roots)? {
-        Some(m) => Some(Snapshot {
-            installed: inventory(&m.root)?,
-            token: m.token,
-            device: m.device,
-        }),
+        Some(m) => {
+            super::storage::migrate_data(&m.root, &m.device);
+            Some(Snapshot {
+                installed: inventory(&m.root)?,
+                token: m.token,
+                device: m.device,
+            })
+        }
         None => None,
     };
     Ok(Some(DeviceRead { mounts, snapshot }))

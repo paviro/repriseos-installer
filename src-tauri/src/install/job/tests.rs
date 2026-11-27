@@ -188,23 +188,7 @@ fn firmware_is_replaced_per_device_while_run_reports_remain() {
         )
         .unwrap();
         artifacts.osos = osos.to_vec();
-        let themes = crate::theme::Themes {
-            default: vec![1, 2],
-            dark: vec![3, 4],
-        };
-        job.save_firmware(&artifacts, Some(&themes)).unwrap();
-        assert_eq!(
-            fs::read(
-                job.device_directory
-                    .join("firmware/themes/default/theme.bin")
-            )
-            .unwrap(),
-            themes.default
-        );
-        assert_eq!(
-            fs::read(job.device_directory.join("firmware/themes/dark/theme.bin")).unwrap(),
-            themes.dark
-        );
+        job.save_firmware(&artifacts).unwrap();
         assert!(!job.directory.join("firmware").exists());
         reports.push(job.directory.join("assembly.json"));
     }

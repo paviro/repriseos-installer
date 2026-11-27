@@ -77,39 +77,6 @@ fn release_package_replays_with_each_devices_identity() {
     )
     .unwrap();
     let apple = prepared.apple_inputs().unwrap();
-    let original = fs::read(inputs.join("osos.bin")).unwrap();
-    let themes = crate::theme::assemble(&bundle, &original)
-        .unwrap()
-        .expect("disk themes");
-    assert_eq!(themes.dark, fs::read(built.join("dark-mode.bin")).unwrap());
-    let catalog: serde_json::Value =
-        serde_json::from_slice(bundle.file("osos", "bitmap_catalog").unwrap()).unwrap();
-    let read = |bytes: &[u8], at: usize| {
-        u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()) as usize
-    };
-    let mut at = 48;
-    for _ in 0..read(&themes.default, 36) {
-        let index = read(&themes.default, at);
-        let offset = read(&themes.default, at + 4);
-        let size = read(&themes.default, at + 8);
-        let source = catalog["bitmaps"][index]["offset"].as_u64().unwrap() as usize + offset;
-        at += 12;
-        assert_eq!(
-            &themes.default[at..at + size],
-            &original[source..source + size]
-        );
-        at = (at + size + 3) & !3;
-    }
-    assert_eq!(at, themes.default.len());
-    assert_eq!(
-        crate::theme::disk_bytes(&bundle).unwrap() as usize,
-        themes.dark.len() + themes.default.len()
-    );
-    println!(
-        "Verified stock theme: {} bytes, sha256 {}",
-        themes.default.len(),
-        reprise_bundle::sha256(&themes.default)
-    );
 
     let mut companions = Vec::new();
     for backup in ["inputs/nor.bin", "inputs/MB565-2.0.1/nor.bin"] {

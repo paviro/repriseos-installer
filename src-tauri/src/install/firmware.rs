@@ -59,7 +59,7 @@ pub(super) fn assemble(
     data: &Path,
     hardware_policy: reprise_device::firmware::HardwarePolicy,
     job: &mut Job<'_>,
-) -> Result<(Artifacts, Option<crate::theme::Themes>)> {
+) -> Result<Artifacts> {
     job.stage("decrypt", "Preparing Apple firmware")?;
     let cache = data.join("firmware");
     fs::create_dir_all(&cache)?;
@@ -111,10 +111,9 @@ pub(super) fn assemble(
         nor,
         hardware_policy,
     )?;
-    let themes = crate::theme::assemble(bundle, &osos)?;
-    job.save_firmware(&artifacts, themes.as_ref())?;
+    job.save_firmware(&artifacts)?;
 
-    Ok((artifacts, themes))
+    Ok(artifacts)
 }
 
 /// Where the decryption of `ciphertext` keeps its progress. The name carries

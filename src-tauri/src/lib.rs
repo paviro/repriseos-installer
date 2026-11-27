@@ -3,7 +3,6 @@ mod extensions;
 mod firmware;
 mod install;
 mod package;
-mod theme;
 mod updates;
 mod usb_permissions;
 

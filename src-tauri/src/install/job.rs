@@ -297,30 +297,9 @@ impl<'a> Job<'a> {
         Ok(None)
     }
 
-    pub(super) fn save_firmware(
-        &self,
-        artifacts: &Artifacts,
-        themes: Option<&crate::theme::Themes>,
-    ) -> Result<()> {
+    pub(super) fn save_firmware(&self, artifacts: &Artifacts) -> Result<()> {
         let staged = self.directory.join("firmware");
-        let mut report = artifacts.write(&staged)?;
-        if let Some(themes) = themes {
-            for (name, bytes) in [("default", &themes.default), ("dark", &themes.dark)] {
-                let relative = format!("themes/{name}/theme.bin");
-                let file = staged.join(&relative);
-                fs::create_dir_all(file.parent().unwrap())?;
-                save(&file, bytes)?;
-                report.files.insert(
-                    relative,
-                    reprise_bundle::assembly::FileReport {
-                        bytes: bytes.len(),
-                        sha256: reprise_bundle::sha256(bytes),
-                    },
-                );
-            }
-            fs::remove_file(staged.join("assembly.json"))?;
-            save_json(&staged.join("assembly.json"), &report)?;
-        }
+        let report = artifacts.write(&staged)?;
         let latest = self.device_directory.join("firmware");
         match fs::remove_dir_all(&latest) {
             Ok(()) => {}

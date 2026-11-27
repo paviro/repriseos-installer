@@ -6,6 +6,12 @@ export interface Scenario {
   group: string;
   label: string;
   screen: Screen;
+  /** The flow the screen belongs to; install unless set. */
+  mode?: "install" | "uninstall";
+  /** An uninstall that keeps the RepriseOS files. */
+  keepFiles?: boolean;
+  /** What a simulated uninstall could not delete. */
+  leftovers?: string[];
   hint?: string;
   discovery?: "absent" | "multiple" | "normal" | "denied";
   usbSetup?: "required" | "denied" | "unavailable" | "waiting" | "checking" | "check-error";
@@ -325,6 +331,49 @@ export const scenarios: Scenario[] = [
     },
   },
   { id: "success", group: "Installation", label: "Success screen", screen: "success" },
+  {
+    id: "uninstall",
+    group: "Uninstall",
+    label: "Uninstall screen",
+    screen: "uninstall",
+    mode: "uninstall",
+    hint: "Continue simulates the package download, then the usual DFU steps follow.",
+  },
+  {
+    id: "uninstall-success",
+    group: "Uninstall",
+    label: "Progress to success",
+    screen: "installation",
+    mode: "uninstall",
+  },
+  {
+    id: "uninstall-keep-files",
+    group: "Uninstall",
+    label: "Bootloader only, files kept",
+    screen: "installation",
+    mode: "uninstall",
+    keepFiles: true,
+  },
+  {
+    id: "uninstall-leftovers",
+    group: "Uninstall",
+    label: "Files that would not delete",
+    screen: "installation",
+    mode: "uninstall",
+    leftovers: ["/Reprise, /Revola/Extensions, /Revola/Data or /themes"],
+  },
+  {
+    id: "uninstall-removal-stopped",
+    group: "Uninstall",
+    label: "iPod stopped during file removal",
+    screen: "installation",
+    mode: "uninstall",
+    installFailure: {
+      stage: "removeFiles",
+      detail: "USB control read: Input/Output Error",
+      deviceStopped: true,
+    },
+  },
   {
     id: "update-available",
     group: "App updates",

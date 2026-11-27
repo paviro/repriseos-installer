@@ -129,17 +129,35 @@ test("installation scenarios report progress, failures, success and cancellation
   for (const scenario of scenarios.filter((item) => item.screen === "installation")) {
     const backend = createMockBackend(scenario, immediate);
     const { channel, events } = capture(backend);
-    const pending = backend.invoke("install", { onEvent: channel });
+    const uninstall = scenario.mode === "uninstall";
+    const pending = backend.invoke(uninstall ? "uninstall" : "install", {
+      onEvent: channel,
+      keepFiles: !!scenario.keepFiles,
+    });
     if (scenario.installFailure) {
       await assert.rejects(pending, { detail: scenario.installFailure.detail });
       // A failure stops at its stage; only a bootloader failure reaches it.
       const reached = events.some((event) => event.stage === "bootloader");
       assert.equal(reached, scenario.installFailure.stage === "bootloader");
     } else {
-      assert.match((await pending).backup_path, /Simulated/);
+      const result = await pending;
+      assert.match(result.backup_path, /Simulated/);
       assert.equal(events.at(-1).cancellable, false);
+      if (uninstall) {
+        assert.equal(result.outcome, "uninstaller_sent");
+        assert.deepEqual(result.leftovers, scenario.keepFiles ? [] : (scenario.leftovers ?? []));
+        assert.equal(
+          events.some((event) => event.stage === "removeFiles"),
+          !scenario.keepFiles,
+        );
+      }
     }
     assert.ok(events.some((event) => event.completed === 50));
+    // Removal is a point of no return; an install closes cancelling only at the bootloader handoff.
+    for (const event of events) {
+      const closed = event.stage === "bootloader" || (uninstall && event.stage === "removeFiles");
+      assert.equal(event.cancellable, !closed, `${scenario.id} ${event.stage}`);
+    }
   }
   const backend = createMockBackend(findScenario("installation-success"), immediate);
   const { channel } = capture(backend);

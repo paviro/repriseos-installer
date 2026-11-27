@@ -5,6 +5,7 @@ import { InstallerScreen } from "./ui/InstallerScreen";
 
 interface IMainScreenProps {
   onInstall: () => void;
+  onUninstall: () => void;
   onManageExtensions: () => void;
   installDisabled?: boolean;
   updates: React.ReactNode;
@@ -12,6 +13,7 @@ interface IMainScreenProps {
 
 const MainScreen: React.FC<IMainScreenProps> = ({
   onInstall,
+  onUninstall,
   onManageExtensions,
   installDisabled,
   updates,
@@ -34,6 +36,12 @@ const MainScreen: React.FC<IMainScreenProps> = ({
           title="Manage extensions"
           description="Add, update or remove extensions on a connected iPod."
           onClick={onManageExtensions}
+          disabled={installDisabled}
+        />
+        <ChoiceButton
+          title="Uninstall RepriseOS"
+          description="Restore Apple’s bootloader and remove RepriseOS from your iPod."
+          onClick={onUninstall}
           disabled={installDisabled}
         />
       </InstallerScreen.Actions>

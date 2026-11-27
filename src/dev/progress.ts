@@ -63,6 +63,48 @@ export async function simulateInstallation(
   };
 }
 
+const uninstallStages = [
+  ["checkBootloader", "Checking installed bootloader"],
+  ["backup", "Backing up boot firmware"],
+  ["removeFiles", "Removing RepriseOS files"],
+  ["bootloader", "Sending bootloader uninstaller"],
+] as const;
+
+export async function simulateUninstall(
+  scenario: Scenario,
+  channel: EventChannel<InstallEvent>,
+  wait: Wait,
+  cancelled: () => boolean,
+  keepFiles: boolean,
+) {
+  for (const [stage, detail] of uninstallStages) {
+    if (keepFiles && stage === "removeFiles") continue;
+    for (const completed of [0, 50, 100]) {
+      channel.onmessage({
+        stage,
+        detail,
+        completed,
+        total: 100,
+        cancellable: stage === "checkBootloader" || stage === "backup",
+      });
+      await wait();
+      if (cancelled()) {
+        const detail = "Uninstall cancelled.";
+        throw { ...failure({ stage, detail }), cancelled: true };
+      }
+      if (scenario.installFailure?.stage === stage && completed === 50) {
+        throw failure(scenario.installFailure);
+      }
+    }
+  }
+  return {
+    operation: "uninstall",
+    outcome: "uninstaller_sent",
+    backup_path: "Simulated backup (no files written)",
+    leftovers: keepFiles ? [] : (scenario.leftovers ?? []),
+  };
+}
+
 export async function simulateUpdate(
   scenario: Scenario,
   channel: EventChannel<UpdateProgress>,

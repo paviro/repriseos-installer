@@ -1,7 +1,7 @@
 import App from "../App";
 import { installDevelopmentBackend, savePreviewDebugZip } from "../lib/backend.ts";
 import { startDeviceChecks } from "../lib/deviceChecks.ts";
-import { startInstallation } from "../lib/installation.ts";
+import { startInstallation, startUninstall } from "../lib/installation.ts";
 import { checkInstallerUpdate, installInstallerUpdate } from "../lib/updates.ts";
 import { mockDevice, mockFirmware, mockPackage } from "./fixtures.ts";
 import { createMockBackend } from "./mockBackend.ts";
@@ -12,7 +12,10 @@ const scenario = findScenario(new URLSearchParams(location.search).get("scenario
 export function initializePreview() {
   installDevelopmentBackend(createMockBackend(scenario, undefined, savePreviewDebugZip));
   if (scenario.screen === "checks") startDeviceChecks(mockDevice);
-  if (scenario.screen === "installation") startInstallation(mockFirmware, mockPackage.digest);
+  if (scenario.screen === "installation") {
+    if (scenario.mode === "uninstall") startUninstall(mockPackage.digest, !!scenario.keepFiles);
+    else startInstallation(mockFirmware, mockPackage.digest);
+  }
   if (scenario.startUpdate) void checkInstallerUpdate().then(installInstallerUpdate);
 }
 
@@ -67,6 +70,8 @@ export function DevPanel() {
       <App
         initial={{
           screen: scenario.screen,
+          mode: scenario.mode,
+          keepFiles: scenario.keepFiles,
           firmware: scenario.firmwareError ? null : mockFirmware,
           packageDigest: mockPackage.digest,
           localPackage: scenario.localPackage

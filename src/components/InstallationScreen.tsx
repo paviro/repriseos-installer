@@ -69,7 +69,8 @@ const InstallationScreen: React.FC<IInstallationScreenProps> = ({
         ? Math.min(100, Math.floor((state.event.completed * 100) / state.event.total))
         : null,
   };
-  const failure = state.failure && failureMessage(state.failure);
+  const uninstall = state.operation === "uninstall";
+  const failure = state.failure && failureMessage(state.failure, { uninstall });
   const { headingRef } = useHeadingFocus();
   const reducedMotion = useReducedMotion();
 
@@ -80,7 +81,15 @@ const InstallationScreen: React.FC<IInstallationScreenProps> = ({
   return (
     <InstallerScreen.Root aria-labelledby="installation-title">
       <InstallerScreen.Title id="installation-title" ref={headingRef} tabIndex={-1}>
-        {state.failure ? "Installation stopped." : "Installing RepriseOS."}
+        {uninstall
+          ? state.failure
+            ? "Uninstall stopped."
+            : state.keepFiles
+              ? "Restoring Apple’s bootloader."
+              : "Removing RepriseOS."
+          : state.failure
+            ? "Installation stopped."
+            : "Installing RepriseOS."}
       </InstallerScreen.Title>
       {!state.failure && (
         <div className="mx-auto mt-6 max-w-112">

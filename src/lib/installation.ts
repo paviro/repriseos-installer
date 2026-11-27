@@ -12,7 +12,7 @@ export interface InstallEvent {
   diagnostic?: boolean;
 }
 
-/** Why an install stopped, as the backend reports it. */
+/** Why an install or uninstall stopped, as the backend reports it. */
 export interface InstallFailure {
   /** Full text for the log, with the stage and backup path. */
   detail: string;
@@ -36,11 +36,18 @@ const labels: Record<string, string> = {
   assemble: "Preparing RepriseOS",
   uploadLoader: "Uploading companion loader",
   uploadOsos: "Uploading RepriseOS",
+  removeFiles: "Removing RepriseOS files",
   bootloader: "Preparing bootloader installer",
   restart: "Restarting iPod",
 };
 
+type Operation = "install" | "uninstall";
+type Outcome = "installer_sent" | "files_updated" | "uninstaller_sent" | "files_removed";
+
 interface InstallationState {
+  operation: Operation;
+  /** An uninstall that leaves the RepriseOS files on the iPod. */
+  keepFiles: boolean;
   running: boolean;
   startedAt: number;
   finishedAt: number | null;
@@ -48,10 +55,14 @@ interface InstallationState {
   failure: InstallFailure | null;
   complete: boolean;
   cancelling: boolean;
-  outcome: "installer_sent" | "files_updated" | null;
+  outcome: Outcome | null;
+  /** What an uninstall could not delete from the iPod. */
+  leftovers: string[];
 }
 
 let state: InstallationState = {
+  operation: "install",
+  keepFiles: false,
   running: false,
   startedAt: 0,
   finishedAt: null,
@@ -60,6 +71,7 @@ let state: InstallationState = {
   complete: false,
   cancelling: false,
   outcome: null,
+  leftovers: [],
 };
 const listeners = new Set<() => void>();
 const publish = (next: InstallationState) => {
@@ -115,7 +127,10 @@ export function canRetry(failure: InstallFailure) {
 
 /** The failure screen's text: what happened, then what to do next, and
  * whether the screen waits for the iPod to retry. */
-export function failureMessage(failure: InstallFailure): {
+export function failureMessage(
+  failure: InstallFailure,
+  { uninstall = false }: { uninstall?: boolean } = {},
+): {
   cause: string;
   next: string | null;
   retry: boolean;
@@ -133,7 +148,7 @@ export function failureMessage(failure: InstallFailure): {
     };
   }
   const cause = failure.cancelled
-    ? "You cancelled the installation."
+    ? `You cancelled the ${uninstall ? "uninstall" : "installation"}.`
     : failure.device_stopped
       ? "Your iPod stopped responding."
       : /[.!?]$/.test(failure.error)
@@ -170,19 +185,55 @@ export function installationLabel(event: InstallEvent) {
 
 let nextJobId = 0;
 
+const completions: Record<Outcome, string> = {
+  files_updated:
+    "COMPLETE: disk files verified; bootloader unchanged; restart requested; boot not verified.",
+  installer_sent:
+    "BOOTLOADER HANDOFF: disk files verified; bootloader installer sent; NOR completion not read back.",
+  files_removed:
+    "COMPLETE: disk files removed; bootloader unchanged; restart requested; boot not verified.",
+  uninstaller_sent:
+    "BOOTLOADER HANDOFF: bootloader uninstaller sent; NOR completion not read back.",
+};
+
 export function startInstallation(firmware: FirmwareInfo, packageDigest: string) {
   if (state.running) return;
+  appendSessionLog("Install/update started; checking device state to select the operation.");
+  startJob("install", false, "install", { firmwareSha256: firmware.sha256, packageDigest });
+}
+
+/** Restore Apple's bootloader, deleting the RepriseOS files unless `keepFiles`. */
+export function startUninstall(packageDigest: string, keepFiles: boolean) {
+  if (state.running) return;
+  appendSessionLog(keepFiles ? "Uninstall started; keeping the files." : "Uninstall started.");
+  startJob("uninstall", keepFiles, "uninstall", { packageDigest, keepFiles });
+}
+
+function startJob(
+  operation: Operation,
+  keepFiles: boolean,
+  command: string,
+  args: Record<string, unknown>,
+) {
   publish({
+    operation,
+    keepFiles,
     running: true,
     startedAt: Date.now(),
     finishedAt: null,
-    event: { stage: "prepare", detail: "", completed: null, total: null, cancellable: true },
+    event: {
+      stage: "prepare",
+      detail: operation === "uninstall" ? "Preparing uninstall" : "",
+      completed: null,
+      total: null,
+      cancellable: true,
+    },
     failure: null,
     complete: false,
     cancelling: false,
     outcome: null,
+    leftovers: [],
   });
-  appendSessionLog("Install/update started; checking device state to select the operation.");
   const jobId = ++nextJobId;
   let lastDetail = "";
   const run = async () => {
@@ -202,34 +253,32 @@ export function startInstallation(firmware: FirmwareInfo, packageDigest: string)
     };
     return invoke<{
       backup_path: string;
-      outcome: "installer_sent" | "files_updated";
-      operation: "install" | "update";
-    }>("install", {
-      firmwareSha256: firmware.sha256,
-      packageDigest,
-      onEvent: channel,
-    });
+      outcome: Outcome;
+      operation: "install" | "update" | "uninstall";
+      leftovers?: string[];
+    }>(command, { ...args, onEvent: channel });
   };
   void run()
     .then((result) => {
-      const completion =
-        result.outcome === "files_updated"
-          ? "COMPLETE: disk files verified; bootloader unchanged; restart requested; boot not verified."
-          : "BOOTLOADER HANDOFF: disk files verified; bootloader installer sent; NOR completion not read back.";
+      const leftovers = result.leftovers ?? [];
       appendSessionLog(
-        `${result.operation.toUpperCase()} ${completion} Backups and logs: ${result.backup_path}`,
+        `${result.operation.toUpperCase()} ${completions[result.outcome]} Backups and logs: ${result.backup_path}`,
       );
+      if (leftovers.length) appendSessionLog(`Left on the iPod: ${leftovers.join(", ")}`);
       publish({
         ...state,
         running: false,
         complete: true,
         outcome: result.outcome,
+        leftovers,
         finishedAt: Date.now(),
       });
     })
     .catch((error: unknown) => {
       const detail = errorDetail(error);
-      appendSessionLog(`Installation stopped: ${detail}`);
+      appendSessionLog(
+        `${operation === "install" ? "Installation" : "Uninstall"} stopped: ${detail}`,
+      );
       publish({
         ...state,
         running: false,

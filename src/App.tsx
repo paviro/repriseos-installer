@@ -9,12 +9,13 @@ import { InstallationScreen } from "./components/InstallationScreen";
 import { InstallerUpdates } from "./components/InstallerUpdates";
 import { MainScreen } from "./components/MainScreen";
 import { SuccessScreen } from "./components/SuccessScreen";
+import { UninstallScreen } from "./components/UninstallScreen";
 import { UsbPermissionsScreen } from "./components/UsbPermissionsScreen";
 import { DebugLog } from "./components/ui/DebugLog";
 import { ExternalLink } from "./components/ui/ExternalLink";
 import { startDeviceChecks } from "./lib/deviceChecks";
 import type { FirmwareInfo } from "./lib/firmware";
-import { startInstallation } from "./lib/installation";
+import { startInstallation, startUninstall } from "./lib/installation";
 import type { PackageInfo } from "./lib/package";
 import { appendSessionLog } from "./lib/sessionLog";
 import { getUpdateState, subscribeToUpdates, updateIsBusy } from "./lib/updates";
@@ -24,6 +25,7 @@ export type Screen =
   | "main"
   | "disclaimer"
   | "firmware"
+  | "uninstall"
   | "permissions"
   | "dfu"
   | "checks"
@@ -31,9 +33,13 @@ export type Screen =
   | "success"
   | "extensions";
 
+type Mode = "install" | "uninstall";
+
 interface AppProps {
   initial?: {
     screen: Screen;
+    mode?: Mode;
+    keepFiles?: boolean;
     firmware: FirmwareInfo | null;
     packageDigest: string;
     localPackage?: PackageInfo;
@@ -58,12 +64,18 @@ const App: React.FC<AppProps> = ({ initial }) => {
     initial?.localPackage ?? null,
   );
   const [packageDigest, setPackageDigest] = React.useState(initial?.packageDigest ?? "");
+  const [mode, setMode] = React.useState<Mode>(initial?.mode ?? "install");
+  const [keepFiles, setKeepFiles] = React.useState(initial?.keepFiles ?? false);
   const reducedMotion = useReducedMotion();
   const scrollRef = React.useRef<HTMLElement>(null);
 
-  const beginInstall = () => {
-    if (!firmware || !packageDigest) return;
-    startInstallation(firmware, packageDigest);
+  // Where Back and Change firmware return to: the screen that prepared the package.
+  const packageScreen: Screen = mode === "uninstall" ? "uninstall" : "firmware";
+  const begin = () => {
+    if (!packageDigest) return;
+    if (mode === "uninstall") startUninstall(packageDigest, keepFiles);
+    else if (firmware) startInstallation(firmware, packageDigest);
+    else return;
     setScreen("installation");
   };
 
@@ -98,10 +110,19 @@ const App: React.FC<AppProps> = ({ initial }) => {
                 }}
                 onInstall={() => {
                   appendSessionLog("New setup started.");
+                  setMode("install");
                   setFirmware(null);
                   setLocalPackage(null);
                   setPackageDigest("");
                   setScreen(disclaimerAcknowledged ? "firmware" : "disclaimer");
+                }}
+                onUninstall={() => {
+                  appendSessionLog("Uninstall setup started.");
+                  setMode("uninstall");
+                  setKeepFiles(false);
+                  setLocalPackage(null);
+                  setPackageDigest("");
+                  setScreen("uninstall");
                 }}
               />
             ) : screen === "disclaimer" ? (
@@ -137,13 +158,25 @@ const App: React.FC<AppProps> = ({ initial }) => {
                 }}
                 onBack={() => setScreen("main")}
               />
+            ) : screen === "uninstall" ? (
+              <UninstallScreen
+                localPackage={localPackage}
+                onSelectPackage={setLocalPackage}
+                keepFiles={keepFiles}
+                onKeepFiles={setKeepFiles}
+                onContinue={(digest) => {
+                  setPackageDigest(digest);
+                  setScreen("permissions");
+                }}
+                onBack={() => setScreen("main")}
+              />
             ) : screen === "permissions" ? (
               <UsbPermissionsScreen
                 onContinue={() => {
                   appendSessionLog("Waiting for DFU connection.");
                   setScreen("dfu");
                 }}
-                onBack={() => setScreen("firmware")}
+                onBack={() => setScreen(packageScreen)}
               />
             ) : screen === "dfu" ? (
               <DfuScreen
@@ -154,17 +187,18 @@ const App: React.FC<AppProps> = ({ initial }) => {
               />
             ) : screen === "checks" ? (
               <DeviceChecksScreen
-                onContinue={beginInstall}
+                onContinue={begin}
+                uninstall={mode === "uninstall"}
                 onBack={() => setScreen("dfu")}
                 onChangeFirmware={() => {
                   setPackageDigest("");
-                  setScreen("firmware");
+                  setScreen(packageScreen);
                 }}
               />
             ) : screen === "installation" ? (
               <InstallationScreen
                 onComplete={() => setScreen("success")}
-                onRetry={beginInstall}
+                onRetry={begin}
                 onBack={() => setScreen("main")}
               />
             ) : screen === "extensions" ? (

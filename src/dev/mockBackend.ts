@@ -1,7 +1,7 @@
 import type { Backend, EventChannel } from "../lib/backend.ts";
 import { simulateChecks, type Wait } from "./checks.ts";
 import { mockDevice, mockFirmware, mockPackage } from "./fixtures.ts";
-import { simulateInstallation, simulateUpdate } from "./progress.ts";
+import { simulateInstallation, simulateUninstall, simulateUpdate } from "./progress.ts";
 import type { InstalledCopy, Scenario } from "./scenarios.ts";
 
 function channel<T>(args: Record<string, unknown>, name = "onEvent"): EventChannel<T> {
@@ -106,6 +106,11 @@ export function createMockBackend(
       case "install":
         cancelled = false;
         return away(simulateInstallation(scenario, channel(args), wait, () => cancelled));
+      case "uninstall":
+        cancelled = false;
+        return away(
+          simulateUninstall(scenario, channel(args), wait, () => cancelled, !!args.keepFiles),
+        );
       case "cancel_install":
         cancelled = true;
         return;

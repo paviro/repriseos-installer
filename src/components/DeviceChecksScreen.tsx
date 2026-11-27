@@ -17,6 +17,8 @@ import { InstallerScreen } from "./ui/InstallerScreen";
 
 interface IDeviceChecksScreenProps {
   onContinue: () => void;
+  /** The checks lead into an uninstall, which needs no firmware file. */
+  uninstall?: boolean;
   onBack: () => void;
   onChangeFirmware: () => void;
 }
@@ -47,6 +49,7 @@ function groupStatus(checks: Check[]): CheckStatus {
 
 const DeviceChecksScreen: React.FC<IDeviceChecksScreenProps> = ({
   onContinue,
+  uninstall = false,
   onBack,
   onChangeFirmware,
 }) => {
@@ -113,7 +116,7 @@ const DeviceChecksScreen: React.FC<IDeviceChecksScreenProps> = ({
             ? "An iPod was detected. Check the connected iPod to continue."
             : complete
               ? report?.hardware_override
-                ? "Experimental override accepted. Continuing installation."
+                ? `Experimental override accepted. Continuing ${uninstall ? "uninstall" : "installation"}.`
                 : "All checks passed. Continue is available."
               : error
                 ? (failure?.message ?? "Checks stopped. Review the error and try again.")
@@ -167,7 +170,9 @@ const DeviceChecksScreen: React.FC<IDeviceChecksScreenProps> = ({
               <Button.Label>DFU guide</Button.Label>
             </Button.Root>
             <Button.Root intent="danger" onClick={acceptUnknownHardware}>
-              <Button.Label>Install anyway (experimental)</Button.Label>
+              <Button.Label>
+                {uninstall ? "Uninstall anyway (experimental)" : "Install anyway (experimental)"}
+              </Button.Label>
             </Button.Root>
           </>
         ) : failure?.action === "another-ipod" ? (
@@ -176,7 +181,7 @@ const DeviceChecksScreen: React.FC<IDeviceChecksScreenProps> = ({
           </Button.Root>
         ) : failure?.action === "firmware" ? (
           <Button.Root onClick={onChangeFirmware}>
-            <Button.Label>Change firmware</Button.Label>
+            <Button.Label>{uninstall ? "Change package" : "Change firmware"}</Button.Label>
           </Button.Root>
         ) : error || replacement ? (
           <React.Fragment>

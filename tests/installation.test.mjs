@@ -8,6 +8,7 @@ import {
   getInstallationState,
   installationLabel,
   startInstallation,
+  startUninstall,
 } from "../src/lib/installation.ts";
 import { getSessionLog } from "../src/lib/sessionLog.ts";
 
@@ -131,6 +132,41 @@ test("disk-only update logs its outcome without claiming a bootloader install", 
   assert.doesNotMatch(log, /BOOTLOADER HANDOFF/);
 });
 
+test("uninstall sends the package and the keep-files choice and logs leftovers", async () => {
+  mockIPC((command, args) => {
+    assert.equal(command, "uninstall");
+    assert.equal(args.packageDigest, "package-hash");
+    assert.equal(args.keepFiles, false);
+    assert.equal(args.firmwareSha256, undefined);
+    return {
+      backup_path: "/backups/remove",
+      operation: "uninstall",
+      outcome: "uninstaller_sent",
+      leftovers: ["/.reprise-*.part"],
+    };
+  });
+  const first = getSessionLog().length;
+  startUninstall("package-hash", false);
+  assert.equal(installationLabel(getInstallationState().event), "Preparing uninstall");
+  await setImmediate();
+  const state = getInstallationState();
+  assert.equal(state.operation, "uninstall");
+  assert.equal(state.outcome, "uninstaller_sent");
+  assert.deepEqual(state.leftovers, ["/.reprise-*.part"]);
+  const log = getSessionLog().slice(first).join("\n");
+  assert.match(log, /UNINSTALL BOOTLOADER HANDOFF: bootloader uninstaller sent/);
+  assert.match(log, /Left on the iPod: \/\.reprise-\*\.part/);
+
+  mockIPC((_command, args) => {
+    assert.equal(args.keepFiles, true);
+    return { backup_path: "/backups/keep", operation: "uninstall", outcome: "uninstaller_sent" };
+  });
+  startUninstall("package-hash", true);
+  await setImmediate();
+  assert.equal(getInstallationState().keepFiles, true);
+  assert.deepEqual(getInstallationState().leftovers, []);
+});
+
 test("channel creation failure stops the job and allows retry", async () => {
   mockIPC(() => undefined);
   window.__TAURI_INTERNALS__.transformCallback = () => {
@@ -218,5 +254,14 @@ test("failure message says what happened, what changed and how to go on", () => 
   assert.deepEqual(
     message({ stage: "uploadOsos", device_stopped: true, cancelled: true }),
     stop("You cancelled the installation."),
+  );
+  assert.deepEqual(
+    failureMessage(failure({ stage: "removeFiles", cancelled: true }), { uninstall: true }),
+    stop("You cancelled the uninstall."),
+  );
+  // A removal that stopped may have deleted files already; it can run again.
+  assert.deepEqual(
+    failureMessage(failure({ stage: "removeFiles", device_stopped: true }), { uninstall: true }),
+    retry("Your iPod stopped responding.", "Put your iPod back into DFU mode to try again."),
   );
 });

@@ -18,6 +18,16 @@ supported model, even if the iPod runs older Apple firmware.
 Follow the DFU instructions in the app. The installer downloads and verifies the
 latest RepriseOS package.
 
+## Uninstall
+
+Choose **Uninstall RepriseOS** and follow the DFU instructions. The installer
+restores Apple's bootloader and deletes RepriseOS, its extensions and their
+settings; your music stays. Tick **Keep the RepriseOS files** to restore only the
+bootloader and keep the Reprise folder for a later install. Cancelling is possible
+until the file removal or the bootloader handoff starts; from there the run
+completes, so the iPod never keeps the RepriseOS bootloader without its firmware
+file.
+
 ## Manage extensions
 
 Connect your iPod running RepriseOS 0.4.0 and let the volume mount.

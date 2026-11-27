@@ -1,6 +1,8 @@
 use super::{
     firmware,
-    storage::{directory, inventory, regular},
+    storage::{
+        directory, file, inventory, regular, FIRMWARE_FILES, FIRMWARE_FOLDER, ROOT_FIRMWARE_FILES,
+    },
     DeviceRead, Mount, Result, Snapshot,
 };
 use sha2::{Digest, Sha256};
@@ -90,19 +92,34 @@ pub(super) fn volume_name(root: &std::path::Path) -> Result<Vec<u16>> {
     Ok(name)
 }
 
+/// The firmware image and the companion loader of a RepriseOS iPod: under
+/// /Reprise/Firmware, or at the disk root for releases through 0.4.0. The
+/// folder wins while both exist, as it does for the bootloader.
+pub(super) fn firmware_files(root: &Path) -> Option<[PathBuf; 2]> {
+    let folder = root.join(FIRMWARE_FOLDER);
+    [
+        FIRMWARE_FILES.map(|name| folder.join(name)),
+        ROOT_FIRMWARE_FILES.map(|name| root.join(name)),
+    ]
+    .into_iter()
+    .find(|files| files.iter().all(|f| file(f)))
+}
+
 fn candidate(root: &Path) -> bool {
     directory(root)
         && directory(&root.join("iPod_Control"))
         && directory(&root.join("iPod_Control/Device"))
-        && root.join("osos-cfw.bin").is_file()
-        && root.join("cfw-loader.bin").is_file()
+        && firmware_files(root).is_some()
 }
 
 pub(super) fn inspect(root: &Path) -> Result<Option<Mount>> {
     if !candidate(root) {
         return Ok(None);
     }
-    let mut image = regular(&root.join("osos-cfw.bin"))?;
+    let Some([image_path, loader_path]) = firmware_files(root) else {
+        return Ok(None);
+    };
+    let mut image = regular(&image_path)?;
     let len = image.metadata().map_err(|e| e.to_string())?.len();
     // The CFW resources and the relocatable RVX runtime follow the Apple image.
     let start = len.saturating_sub(2 * 1024 * 1024);
@@ -114,7 +131,7 @@ pub(super) fn inspect(root: &Path) -> Result<Option<Mount>> {
         .take(2 * 1024 * 1024)
         .read_to_end(&mut payload)
         .map_err(|e| e.to_string())?;
-    let mut loader = regular(&root.join("cfw-loader.bin"))?;
+    let mut loader = regular(&loader_path)?;
     let mut sysinfo = [0; 0x120];
     loader
         .seek(SeekFrom::Start(0x25100))
@@ -193,8 +210,8 @@ pub(super) fn read_mounts(
         root.hash(&mut key);
         #[cfg(windows)]
         volume_name(root)?.hash(&mut key);
-        for file in ["osos-cfw.bin", "cfw-loader.bin"] {
-            let meta = fs::symlink_metadata(root.join(file)).map_err(|e| e.to_string())?;
+        for path in firmware_files(root).into_iter().flatten() {
+            let meta = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
             meta.len().hash(&mut key);
             meta.modified().ok().hash(&mut key);
             #[cfg(unix)]
@@ -212,6 +229,7 @@ pub(super) fn read_mounts(
         Some(m) => {
             super::storage::migrate_data(&m.root, &m.device);
             super::storage::remove_themes(&m.root, &m.device);
+            super::storage::remove_root_firmware(&m.root, &m.device);
             Some(Snapshot {
                 installed: inventory(&m.root)?,
                 token: m.token,

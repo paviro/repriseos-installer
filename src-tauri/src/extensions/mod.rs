@@ -43,12 +43,23 @@ pub struct DeviceInfo {
 }
 
 impl DeviceInfo {
-    /// Whether the firmware keeps extension data under /Reprise/Data. Releases
-    /// through 0.4.0 read /Revola/Data.
-    fn reprise_data(&self) -> bool {
+    /// Whether the firmware is a release after 0.4.0 or a development build.
+    fn after_0_4_0(&self) -> bool {
         self.repriseos == "Development"
             || semver::Version::parse(&self.repriseos)
                 .is_ok_and(|v| v.cmp_precedence(&semver::Version::new(0, 4, 0)).is_gt())
+    }
+
+    /// Whether the firmware keeps extension data under /Reprise/Data. Releases
+    /// through 0.4.0 read /Revola/Data.
+    fn reprise_data(&self) -> bool {
+        self.after_0_4_0()
+    }
+
+    /// Whether the firmware boots from /Reprise/Firmware. Releases through
+    /// 0.4.0 booted /osos-cfw.bin and /cfw-loader.bin at the disk root.
+    fn reprise_firmware(&self) -> bool {
+        self.after_0_4_0()
     }
 
     fn allows(&self, pkg: &package::Package) -> bool {

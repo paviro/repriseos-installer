@@ -241,6 +241,41 @@ fn theme_packs_leave_an_ipod_whose_firmware_no_longer_reads_them() {
 }
 
 #[test]
+fn firmware_in_the_reprise_folder_lists_and_clears_the_root_files() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::create_dir_all(root.join("iPod_Control/Device")).unwrap();
+    let folder = root.join("Reprise/Firmware");
+    let probe = |key: Option<&str>| read_mounts(vec![root.into()], key).unwrap();
+
+    // A 0.4.0 iPod boots from the root and keeps its files.
+    fs::write(root.join("osos-cfw.bin"), image("0.4.0")).unwrap();
+    fs::write(root.join("cfw-loader.bin"), vec![0; 0x25220]).unwrap();
+    let old = probe(None).unwrap();
+    assert_eq!(old.snapshot.unwrap().device.repriseos, "0.4.0");
+    assert!(root.join("osos-cfw.bin").is_file());
+
+    // The folder wins once it holds both files, and the root copies go.
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("reprise.bin"), image("Development")).unwrap();
+    assert!(probe(Some(&old.mounts)).is_none());
+    fs::write(folder.join("loader.bin"), vec![0; 0x25220]).unwrap();
+    let new = probe(Some(&old.mounts)).unwrap();
+    assert_eq!(new.snapshot.unwrap().device.repriseos, "Development");
+    assert!(!root.join("osos-cfw.bin").exists());
+    assert!(!root.join("cfw-loader.bin").exists());
+    assert!(probe(Some(&new.mounts)).is_none());
+
+    // A link at the root is left alone.
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(folder.join("reprise.bin"), root.join("osos-cfw.bin")).unwrap();
+        assert!(probe(None).unwrap().snapshot.is_some());
+        assert!(fs::symlink_metadata(root.join("osos-cfw.bin")).is_ok());
+    }
+}
+
+#[test]
 fn unknown_development_can_install_and_old_release_cannot() {
     let dev = firmware::identify(b"RepriseOS Development\0", "iPod".into()).unwrap();
     let ext = parse(&request("sample", "1.0.0", 81, None).data).unwrap();

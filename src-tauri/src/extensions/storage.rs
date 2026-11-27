@@ -11,6 +11,11 @@ use std::{
 
 pub(super) const PRIMARY: &str = "/Reprise/Extensions/";
 const LEGACY: &str = "/Revola/Extensions/";
+/// The firmware image and the companion loader after 0.4.0, under this folder.
+pub(super) const FIRMWARE_FOLDER: &str = "Reprise/Firmware";
+pub(super) const FIRMWARE_FILES: [&str; 2] = ["reprise.bin", "loader.bin"];
+/// The same two files of releases through 0.4.0, at the disk root.
+pub(super) const ROOT_FIRMWARE_FILES: [&str; 2] = ["osos-cfw.bin", "cfw-loader.bin"];
 
 fn link(m: &Metadata) -> bool {
     #[cfg(windows)]
@@ -33,6 +38,10 @@ pub(super) fn regular(path: &Path) -> Result<File> {
 
 pub(super) fn directory(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok_and(|m| m.is_dir() && !link(&m))
+}
+
+pub(super) fn file(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|m| m.is_file() && !link(&m))
 }
 
 /// Moves the extension data folders a RepriseOS release through 0.4.0 kept
@@ -126,6 +135,26 @@ pub(super) fn remove_themes(root: &Path, device: &DeviceInfo) {
         eprintln!("Theme folder: could not remove {}: {e}", themes.display());
     }
     let _ = fs::remove_dir(&themes);
+}
+
+/// Removes the firmware files a RepriseOS release through 0.4.0 booted from
+/// the disk root, /osos-cfw.bin and /cfw-loader.bin, once /Reprise/Firmware
+/// holds both files of a later firmware; the bootloader of that firmware
+/// reads only the folder. Links are not followed and a failure only prints;
+/// the device still lists.
+pub(super) fn remove_root_firmware(root: &Path, device: &DeviceInfo) {
+    let folder = root.join(FIRMWARE_FOLDER);
+    if !device.reprise_firmware() || !FIRMWARE_FILES.iter().all(|name| file(&folder.join(name))) {
+        return;
+    }
+    for name in ROOT_FIRMWARE_FILES {
+        let path = root.join(name);
+        if file(&path) {
+            if let Err(e) = fs::remove_file(&path) {
+                eprintln!("Root firmware: could not remove {}: {e}", path.display());
+            }
+        }
+    }
 }
 
 pub(super) fn write_file(path: &Path, bytes: &[u8], replace: bool) -> io::Result<()> {
